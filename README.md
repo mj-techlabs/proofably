@@ -40,3 +40,12 @@ Commands are executed within a `node:22-alpine` image. The source is a Git archi
 ## License
 
 Apache-2.0
+
+## Verification experiment API (Checkpoint 1)
+
+A separate, versioned function-experiment API now validates explicit targets,
+JSON arguments, contract provenance, and intended execution metadata. Its first
+deterministic predicate checks the smallest power of two greater than or equal
+to a positive safe integer. Behavioral comparison and per-revision contract
+verdicts remain separate. See [the schema and verdict limits](docs/verification-experiments.md).
+This API is not yet connected to the CLI or an AI planner.

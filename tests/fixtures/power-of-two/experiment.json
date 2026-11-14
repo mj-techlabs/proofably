@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "power-of-two-exact-boundary",
+  "target": { "module": "index.js", "export": "nextPowerOfTwo" },
+  "arguments": [8],
+  "contract": {
+    "id": "smallest-power-of-two-gte",
+    "provenance": {
+      "source": "docs/verification-experiments.md#fixture-contract",
+      "statement": "For a positive safe integer n, return the smallest power of two greater than or equal to n."
+    }
+  },
+  "expectedExecution": { "runtime": "node", "timeoutMs": 1000, "expectedExitCode": 0 }
+}
