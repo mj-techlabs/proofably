@@ -1,0 +1,5 @@
+{
+  "experiments": [
+    {"id": "existing-test-suite", "command": ["node", "--test"]}
+  ]
+}
