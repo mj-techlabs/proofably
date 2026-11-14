@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { evaluateExperiment } from './evidence.js';
+import { isolationOptions } from './docker-options.js';
 
 function arg(name, fallback) { const i=process.argv.indexOf(name); return i<0 ? fallback : process.argv[i+1]; }
 function git(...args) { return execFileSync('git', args, {encoding:'utf8'}).trim(); }
@@ -18,10 +19,8 @@ function run(ref, command, timeoutSeconds) {
     const archive=execFileSync('git',['archive','--format=tar',revision],{maxBuffer:64*1024*1024});
     writeFileSync(join(temp,'source.tar'),archive);
     const script=`mkdir -p /work && tar -xf /input/source.tar -C /work && cd /work && exec "$@"`;
-    const args=['run','--rm','--network','none','--cap-drop','ALL','--security-opt','no-new-privileges',
-      '--memory','512m','--cpus','1','--pids-limit','128','--read-only','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',
-      '--tmpfs','/work:rw,nosuid,nodev,size=128m','--mount',`type=bind,src=${join(temp,'source.tar')},dst=/input/source.tar,readonly`,
-      '--user','1000:1000','node:22-alpine','sh','-c',script,'proofably',...command];
+    const args=['run','--rm',...isolationOptions(),'--mount',`type=bind,src=${join(temp,'source.tar')},dst=/input/source.tar,readonly`,
+      'node:22-alpine','sh','-c',script,'proofably',...command];
     const p=spawnSync('docker',args,{encoding:'utf8',timeout:timeoutSeconds*1000,maxBuffer:2*1024*1024});
     return {exitCode:p.status,stdout:p.stdout||'',stderr:p.stderr||'',timedOut:p.error?.code==='ETIMEDOUT'};
   } finally {rmSync(temp,{recursive:true,force:true});}
