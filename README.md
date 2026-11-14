@@ -18,7 +18,7 @@ node /path/to/proofably/src/cli.js check \
 `--experiments` contains JSON such as:
 
 ```json
-{"experiments":[{"id":"test-suite","command":["node","--test"]}]}
+{ "experiments": [{ "id": "test-suite", "command": ["node", "--test"] }] }
 ```
 
 Commands are executed within a `node:22-alpine` image. The source is a Git archive, not a host workspace mount. The image is not currently pinned by digest. This starter supports projects that need no additional dependency installation. It is **not suitable for running hostile repositories**: Docker isolation alone is not a hardened boundary and build/test scripts can be malicious. Use disposable machines for untrusted inputs.
@@ -39,4 +39,4 @@ Commands are executed within a `node:22-alpine` image. The source is a Git archi
 
 ## License
 
-Intended Apache-2.0. Add the official LICENSE file and verify employment IP ownership before publishing.
+Apache-2.0
