@@ -50,4 +50,14 @@ to a positive safe integer. Behavioral comparison and per-revision contract
 verdicts remain separate. See [the schema and verdict limits](docs/verification-experiments.md).
 Function experiments can now run through a separate Docker execution entry point;
 see [local execution and integration tests](docs/verification-experiments.md#docker-execution-task-2).
-There is no AI planner yet.
+Function verification defaults to three fresh Docker attempts per revision and
+writes a versioned evidence bundle. Replay reruns the saved experiment with exact
+recorded commits, image, and installed artifacts:
+
+```sh
+node src/function-cli.js replay --bundle function-report.json \
+  --repository /path/to/target-repository --output replay-report.json
+```
+
+See [repetition, evidence, and replay](docs/verification-experiments.md#repetition-and-evidence-checkpoint-3)
+for settings, classifications, and limits. There is no AI planner yet.

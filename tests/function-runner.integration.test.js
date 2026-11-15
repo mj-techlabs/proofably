@@ -5,18 +5,19 @@ import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { dockerAvailability, verifyFunctionExperiment } from '../src/function-runner.js';
 import { functionRepository } from './helpers/function-repository.js';
+import { serializeEvidence, readJsonFile, replayEvidence } from '../src/evidence-bundle.js';
 
 const unavailable = dockerAvailability();
 const image = process.env.PROOFABLY_TEST_IMAGE || 'node:22-alpine';
 // A running daemon with a missing image is a failure, not a skipped test.
 const options = { skip: unavailable || false, timeout: 120000 };
-function verify(t, source, changeExperiment) {
+function verify(t, source, changeExperiment, repetitions = 1) {
   const input = functionRepository(t, source);
   input.experiment.expectedExecution.timeoutMs = 10000;
   changeExperiment?.(input.experiment);
-  const report = verifyFunctionExperiment({ ...input, image });
+  const report = verifyFunctionExperiment({ ...input, image, repetitions });
   t.after(() => {
-    for (const observation of Object.values(report.observations)) {
+    for (const observation of Object.values(report.attempts).flat()) {
       if (!observation.cleanup) continue;
       assert.equal(observation.cleanup.removed, true);
       const inspection = spawnSync('docker', ['container', 'inspect', observation.cleanup.name], { encoding: 'utf8', timeout: 8000 });
@@ -24,7 +25,7 @@ function verify(t, source, changeExperiment) {
       assert.match(inspection.stderr, /No such (object|container)/i);
     }
   });
-  return report;
+  return { ...report, fixtureRepository: input.repository };
 }
 
 function checkFailure(report, kind) {
@@ -34,7 +35,10 @@ function checkFailure(report, kind) {
 }
 
 test('Docker: nextPowerOfTwo base=8 and candidate=16 with independent verdicts', options, t => {
-  const report = verify(t);
+  const { fixtureRepository, ...report } = verify(t, undefined, undefined, 3);
+  assert.deepEqual(report.attempts.base.map(a => a.value), [8, 8, 8]);
+  assert.deepEqual(report.attempts.candidate.map(a => a.value), [16, 16, 16]);
+  assert.equal(new Set([...report.attempts.base, ...report.attempts.candidate].map(a => a.cleanup.name)).size, 6);
   assert.equal(report.observations.base.value, 8, JSON.stringify(report.observations.base));
   assert.equal(report.observations.candidate.value, 16);
   assert.equal(report.contracts.base.status, 'satisfied');
@@ -42,6 +46,23 @@ test('Docker: nextPowerOfTwo base=8 and candidate=16 with independent verdicts',
   assert.equal(report.comparison, 'behavioral-difference');
   assert.match(report.revisions.base, /^[a-f0-9]{40,64}$/);
   assert.notEqual(report.observations.base.cleanup.name, report.observations.candidate.cleanup.name);
+  const original = join(fixtureRepository, 'evidence.json');
+  const output = join(fixtureRepository, 'replay.json');
+  const saved = serializeEvidence(report);
+  writeFileSync(original, saved);
+  const replay = spawnSync(process.execPath, [new URL('../src/function-cli.js', import.meta.url).pathname,
+    'replay', '--bundle', original, '--repository', fixtureRepository, '--output', output],
+  { encoding: 'utf8', timeout: 110000 });
+  assert.equal(replay.status, 0, replay.stderr);
+  const replayed = readJsonFile(output);
+  assert.equal(replayed.mode, 'execution-replay');
+  assert.equal(replayed.status, 'match');
+  assert.deepEqual(replayed.evidence.attempts.base.map(a => a.value), [8, 8, 8]);
+  assert.deepEqual(replayed.evidence.attempts.candidate.map(a => a.value), [16, 16, 16]);
+  assert.equal(replayed.evidence.contracts.candidate.status, 'confirmed-contract-violation');
+  assert.equal(readFileSync(original, 'utf8'), saved);
+  const oldNames = new Set(Object.values(report.attempts).flat().map(a => a.cleanup.name));
+  assert.ok(Object.values(replayed.evidence.attempts).flat().every(a => a.cleanup.verified && !oldNames.has(a.cleanup.name)));
 });
 
 test('Docker: function exception is unverified', options, t => {
@@ -101,4 +122,31 @@ test('Docker: legacy command CLI retains comparison and report behavior', option
   assert.equal(report.findings[0].status, 'behavioral-difference');
   assert.equal(report.findings[0].base.stdout.trim(), '8');
   assert.equal(report.findings[0].candidate.stdout.trim(), '16');
+});
+
+
+test('Docker: stable matching results reproduce across three containers per revision', options, t => {
+  const source = readFileSync(new URL('./fixtures/power-of-two/base.js', import.meta.url), 'utf8');
+  const report = verify(t, source, undefined, 3);
+  assert.equal(report.comparison, 'no-difference');
+  assert.equal(report.contracts.base.status, 'satisfied');
+  assert.equal(report.contracts.candidate.status, 'satisfied');
+});
+
+test('Docker: conflicting container-dependent outputs never confirm a violation', options, t => {
+  const report = verify(t, 'export function nextPowerOfTwo() { return process.env.HOSTNAME; }', undefined, 3);
+  assert.equal(report.reproduction.candidate.reason, 'inconsistent-results');
+  assert.equal(report.contracts.candidate.status, 'unverified');
+  assert.equal(report.contracts.base.status, 'satisfied');
+  assert.equal(report.comparison, 'unverified');
+});
+
+test('Docker: negative zero survives harness, serialized evidence and execution replay', options, t => {
+  const { fixtureRepository, ...report } = verify(t, 'export function nextPowerOfTwo() { return -0; }');
+  assert.ok(Object.is(report.attempts.candidate[0].value, -0));
+  const saved = JSON.parse(serializeEvidence(report));
+  assert.ok(Object.is(saved.attempts.candidate[0].value, -0));
+  const replay = replayEvidence(saved, { repository: fixtureRepository });
+  assert.equal(replay.status, 'match');
+  assert.ok(Object.is(replay.evidence.attempts.candidate[0].value, -0));
 });

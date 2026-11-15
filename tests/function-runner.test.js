@@ -15,13 +15,14 @@ function fakeDocker(start, calls, cleanup = ok('')) {
     if (args[0] === 'create') return ok('container-id');
     if (args[0] === 'start') return start(args);
     if (args[0] === 'rm') return cleanup;
+    if (args[0] === 'container') return { status: 1, stderr: 'Error: No such object: fixture' };
     throw new Error(`Unexpected call ${args}`);
   };
 }
 const envelope = value => JSON.stringify({ protocolVersion: 1, outcome: 'returned', value });
 
 test('runner fixes revisions, image, harness and isolation; always removes separate containers', t => {
-  const input = functionRepository(t);
+  const input = { ...functionRepository(t), repetitions: 1 };
   const calls = [];
   let run = 0;
   const report = verifyFunctionExperiment(input, { docker: fakeDocker(() => ok(envelope(++run === 1 ? 8 : 16)), calls) });
@@ -46,7 +47,7 @@ test('runner fixes revisions, image, harness and isolation; always removes separ
 });
 
 test('runner distinguishes failures and never confirms them', t => {
-  const input = functionRepository(t);
+  const input = { ...functionRepository(t), repetitions: 1 };
   for (const [result, kind] of [
     [{ status: null, error: { code: 'ETIMEDOUT', message: 'timeout' } }, 'timeout'],
     [{ status: null, error: { code: 'ENOBUFS', message: 'large output' } }, 'output-limit'],
@@ -67,8 +68,8 @@ test('runner distinguishes failures and never confirms them', t => {
 });
 
 test('create, image and cleanup failures cannot confirm violations', t => {
-  const input = functionRepository(t);
-  for (const stage of ['create', 'image', 'rm']) {
+  const input = { ...functionRepository(t), repetitions: 1 };
+  for (const stage of ['create', 'image', 'container']) {
     const calls = [];
     const docker = fakeDocker(() => ok(envelope(16)), calls);
     const report = verifyFunctionExperiment(input, { docker: (args, options) =>
@@ -79,7 +80,7 @@ test('create, image and cleanup failures cannot confirm violations', t => {
 });
 
 test('unexpected process errors still attempt explicit cleanup', t => {
-  const input = functionRepository(t);
+  const input = { ...functionRepository(t), repetitions: 1 };
   const calls = [];
   const report = verifyFunctionExperiment(input, { docker: fakeDocker(() => { throw new Error('process failure'); }, calls) });
   assert.equal(report.contracts.candidate.status, 'unverified');
@@ -87,7 +88,7 @@ test('unexpected process errors still attempt explicit cleanup', t => {
 });
 
 test('invalid experiment and revisions fail before Docker execution', t => {
-  const input = functionRepository(t);
+  const input = { ...functionRepository(t), repetitions: 1 };
   const docker = () => assert.fail('Docker must not run');
   assert.throws(() => verifyFunctionExperiment({ ...input, experiment: {} }, { docker }), TypeError);
   assert.throws(() => verifyFunctionExperiment({ ...input, base: '--bad-ref' }, { docker }));
