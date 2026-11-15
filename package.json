@@ -8,10 +8,15 @@
   },
   "scripts": {
     "test": "node --test",
-    "start": "node src/cli.js"
+    "start": "node src/cli.js",
+    "test:live": "node --test tests/ai.live.test.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dependencies": {
+    "acorn": "8.19.0",
+    "openai": "7.57.0"
+  }
 }

@@ -11,7 +11,8 @@ import { executionSettings, summarizeReproduction } from './reproduction.js';
 const LIMIT = 1048576;
 const BOOTSTRAP = 'tar -xf /proofably/source.tar -C /work && cd /work && exec node /proofably/function-harness.mjs';
 const extraOptions = ['--memory-swap', '512m', '--ulimit', 'nofile=256:256', '--log-driver', 'none'];
-const dockerCommand = (args, options) => spawnSync('docker', args, options);
+export const dockerCommand = (args, options) => spawnSync('docker', args, { ...options,
+  env: Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OPENAI_'))) });
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const successful = result => !result.error && result.status === 0;
 const detail = result => boundedText(result.error?.message || [result.stderr, result.stdout].filter(Boolean).join('\n') || `exit ${result.status}`, 4096);

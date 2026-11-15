@@ -2,11 +2,11 @@
 
 An experimental, agent-independent verification engine for code changes.
 
-**Current status: experimental foundation, not yet an AI verifier.** The v0.1 prototype executes a supplied list of commands against two Git revisions in separate Docker containers and reports observable differences. It does not generate tests, infer requirements, or prove defects yet.
+**Current status: experimental verification prototype.** Proofably compares Git revisions in Docker, evaluates explicit function contracts, saves reproducible evidence, and replays execution. An optional OpenAI Responses API planner proposes bounded adversarial inputs for a selected JavaScript function. Requirements and contracts are still supplied explicitly; AI does not establish defects.
 
 ## Quick start
 
-Requirements: Node.js 20+, Docker daemon, Git. Run from the Git repository you want to verify.
+Requirements: Node.js 22+, Docker daemon, Git. Run from the Git repository you want to verify.
 
 ```sh
 node /path/to/proofably/src/cli.js check \
@@ -33,7 +33,7 @@ Commands are executed within a `node:22-alpine` image. The source is a Git archi
 
 1. Build a reproducible defect benchmark and conventional LLM-review baseline.
 2. Add independent requirement/contract extraction with provenance.
-3. Add an LLM experiment planner behind a provider interface.
+3. Evaluate the initial provider-neutral experiment planner against real defects.
 4. Support generated test harnesses and stronger evidence validation.
 5. Introduce stronger sandboxing, dependency setup, and resource accounting.
 
@@ -60,4 +60,51 @@ node src/function-cli.js replay --bundle function-report.json \
 ```
 
 See [repetition, evidence, and replay](docs/verification-experiments.md#repetition-and-evidence-checkpoint-3)
-for settings, classifications, and limits. There is no AI planner yet.
+for settings, classifications, and limits. An optional AI planner is described below.
+
+
+## AI-generated inputs (Checkpoint 4)
+
+Install the pinned dependencies with `npm ci` (Node.js 22+). Start Docker and
+install `node:22-alpine` explicitly. Supply `OPENAI_API_KEY` through the environment
+only; no `.env` loader or key CLI flag is provided.
+
+```sh
+# Enter the key without putting it into shell history or printing it.
+read -rs -p 'OpenAI API key: ' OPENAI_API_KEY; echo
+export OPENAI_API_KEY
+
+node src/function-cli.js ai \
+  --repository /path/to/target-repository \
+  --base main --head HEAD \
+  --experiment tests/fixtures/power-of-two/experiment.json \
+  --model gpt-6-luna --max-cases 5 --max-cost-usd 0.02 \
+  --output-dir proofably-ai-example
+```
+
+This explicitly sends only the selected function's bounded base/candidate source,
+its selected-function diff, and the supplied contract to OpenAI. The target must
+exist in both revisions and match the experiment. Template arguments are not sent
+as examples. The model generates arguments and rationale, never executable tests
+or authoritative expected outputs. Only the existing power-of-two contract is
+supported in this checkpoint.
+
+The default is one request, no retries, up to five cases, and three Docker attempts
+per revision per case, within a shared three-minute run budget. Cost controls are
+conservative application estimates, **not guaranteed billing hard stops**.
+Unknown/stale pricing fails closed. See [AI planner limits, pricing and evidence](docs/verification-experiments.md#ai-generated-experiments-checkpoint-4).
+
+The new directory contains `planning.json`, `manifest.json`, and ordinary
+`case-001.json` evidence bundles. Replay a case without OpenAI:
+
+```sh
+node src/function-cli.js replay --bundle proofably-ai-example/case-001.json \
+  --repository /path/to/target-repository --output replay.json
+```
+
+`npm test` never enables the live API test by default. To explicitly run the paid
+live demonstration with credentials and Docker available:
+
+```sh
+PROOFABLY_LIVE_API_TEST=1 npm run test:live
+```
